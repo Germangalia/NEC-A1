@@ -136,3 +136,25 @@ class NeuralNet:
     def tanh_derivative(self, x):
         """Derivative of tanh activation function"""
         return 1 - np.tanh(x) ** 2
+    
+    def forward_propagation(self, X):
+        """
+        Perform forward propagation through the network
+        :param X: Input data of shape (n_samples, n_features)
+        :return: Output of the network
+        """
+        # Initialize the first layer's activation with input data
+        self.xi[0] = X.T if len(X.shape) > 1 else X.reshape(-1, 1)  # Transpose to match (n_features, n_samples)
+        
+        # Propagate through each layer from 1 to L-1 (excluding input layer)
+        for l in range(1, self.L):
+            # Calculate the weighted input (h) for layer l
+            # h[l] = w[l] * xi[l-1] + theta[l] (broadcasting handles the bias addition)
+            self.h[l] = np.dot(self.w[l], self.xi[l-1]) + self.theta[l].reshape(-1, 1)
+            
+            # Apply activation function to get activations for layer l
+            # Using the activation function specified by self.fact
+            self.xi[l] = self.activation_function(self.h[l])
+        
+        # Return the output of the last layer (transposed back to (n_samples, n_outputs))
+        return self.xi[self.L-1].T
