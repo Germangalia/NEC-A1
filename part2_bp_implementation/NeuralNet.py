@@ -67,3 +67,72 @@ class NeuralNet:
         self.fact = fact
         self.learning_rate = learning_rate
         self.momentum = momentum
+        
+    def activation_function(self, x):
+        """
+        Apply the selected activation function
+        :param x: Input array
+        :return: Activated output
+        """
+        if self.fact == 'sigmoid':
+            return self.sigmoid(x)
+        elif self.fact == 'relu':
+            return self.relu(x)
+        elif self.fact == 'linear':
+            return self.linear(x)
+        elif self.fact == 'tanh':
+            return self.tanh(x)
+        else:
+            raise ValueError(f"Unknown activation function: {self.fact}")
+    
+    def activation_derivative(self, x):
+        """
+        Apply the derivative of the selected activation function
+        :param x: Input array
+        :return: Derivative of the activated output
+        """
+        if self.fact == 'sigmoid':
+            return self.sigmoid_derivative(x)
+        elif self.fact == 'relu':
+            return self.relu_derivative(x)
+        elif self.fact == 'linear':
+            return self.linear_derivative(x)
+        elif self.fact == 'tanh':
+            return self.tanh_derivative(x)
+        else:
+            raise ValueError(f"Unknown activation function: {self.fact}")
+    
+    def sigmoid(self, x):
+        """Sigmoid activation function"""
+        # To prevent overflow, clip x to a reasonable range
+        x = np.clip(x, -500, 500)
+        return 1 / (1 + np.exp(-x))
+    
+    def sigmoid_derivative(self, x):
+        """Derivative of sigmoid activation function"""
+        s = self.sigmoid(x)
+        return s * (1 - s)
+    
+    def relu(self, x):
+        """ReLU activation function"""
+        return np.maximum(0, x)
+    
+    def relu_derivative(self, x):
+        """Derivative of ReLU activation function"""
+        return (x > 0).astype(float)
+    
+    def linear(self, x):
+        """Linear activation function"""
+        return x
+    
+    def linear_derivative(self, x):
+        """Derivative of linear activation function"""
+        return np.ones_like(x)
+    
+    def tanh(self, x):
+        """Tanh activation function"""
+        return np.tanh(x)
+    
+    def tanh_derivative(self, x):
+        """Derivative of tanh activation function"""
+        return 1 - np.tanh(x) ** 2
