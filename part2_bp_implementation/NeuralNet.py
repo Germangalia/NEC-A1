@@ -244,8 +244,8 @@ class NeuralNet:
             X_val, y_val = None, None
         
         # Initialize loss history arrays
-        train_losses = []
-        val_losses = []
+        self.train_loss_history = []
+        self.val_loss_history = []
         
         # Training loop
         for epoch in range(epochs):
@@ -257,7 +257,7 @@ class NeuralNet:
             # Calculate and store the training loss before this epoch's updates
             train_pred = self.predict(X_train)
             train_loss = self._mean_squared_error(y_train, train_pred)
-            train_losses.append(train_loss)
+            self.train_loss_history.append(train_loss)
             
             # Perform forward and backward propagation for each sample in the training batch
             for i in range(len(X_train)):
@@ -274,17 +274,17 @@ class NeuralNet:
             if X_val is not None:
                 val_pred = self.predict(X_val)
                 val_loss = self._mean_squared_error(y_val, val_pred)
-                val_losses.append(val_loss)
+                self.val_loss_history.append(val_loss)
             else:
                 # If no validation data, append NaN or the same as training loss
-                val_losses.append(np.nan)
+                self.val_loss_history.append(np.nan)
             
             # Print progress every 10% of epochs
             if (epoch + 1) % max(1, epochs // 10) == 0:
                 print(f"Epoch {epoch + 1}/{epochs}, Training Loss: {train_loss:.6f}, "
-                      f"Validation Loss: {val_losses[-1]:.6f if not np.isnan(val_losses[-1]) else 'N/A'}")
+                      f"Validation Loss: {self.val_loss_history[-1]:.6f if not np.isnan(self.val_loss_history[-1]) else 'N/A'}")
         
-        return train_losses, val_losses
+        return self.train_loss_history, self.val_loss_history
     
     def _mean_squared_error(self, y_true, y_pred):
         """
@@ -309,3 +309,31 @@ class NeuralNet:
         
         # Return the predictions, ensuring they're the right shape
         return predictions if predictions.shape[0] > 1 else predictions.ravel()
+    
+    def loss_epochs(self):
+        """
+        Return the evolution of training and validation errors for each epoch
+        This method should be called after the fit method to get the stored loss history
+        :return: 2 arrays of size (n_epochs, 2) containing training and validation error evolution
+        """
+        # The method returns 2 arrays of size (n_epochs, 2)
+        # This likely means each array has shape (n_epochs, 2) where:
+        # - Column 0 contains the error values
+        # - Column 1 could contain additional metrics or be unused
+        
+        if hasattr(self, 'train_loss_history') and hasattr(self, 'val_loss_history'):
+            n_epochs = len(self.train_loss_history)
+            
+            # Create arrays of shape (n_epochs, 2) as required
+            # Column 0: error values, Column 1: can be used for additional metrics if needed
+            train_errors = np.zeros((n_epochs, 2))
+            val_errors = np.zeros((n_epochs, 2))
+            
+            # Fill the first column with the actual loss values
+            train_errors[:, 0] = self.train_loss_history
+            val_errors[:, 0] = self.val_loss_history
+            
+            return train_errors, val_errors
+        else:
+            # If no loss history exists, return empty arrays with the right shape
+            return np.array([]).reshape(0, 2), np.array([]).reshape(0, 2)
