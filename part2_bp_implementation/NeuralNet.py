@@ -209,3 +209,88 @@ class NeuralNet:
             # Store current changes for next iteration's momentum
             self.d_w_prev[l] = self.d_w[l].copy()
             self.d_theta_prev[l] = self.d_theta[l].copy()
+    
+    def fit(self, X, y, epochs=100, validation_split=0.0):
+        """
+        Train the neural network with training and optional validation data
+        :param X: Input data of shape (n_samples, n_features)
+        :param y: Target values of shape (n_samples, n_outputs)
+        :param epochs: Number of training epochs
+        :param validation_split: Fraction of data to use for validation (between 0 and 1)
+        :return: Training and validation loss history
+        """
+        import numpy as np
+        
+        # Convert inputs to numpy arrays if they aren't already
+        X = np.array(X)
+        y = np.array(y)
+        
+        # Determine the number of samples
+        n_samples = X.shape[0]
+        
+        # Shuffle the data
+        indices = np.random.permutation(n_samples)
+        X_shuffled = X[indices]
+        y_shuffled = y[indices]
+        
+        # Split the data for training and validation if validation_split > 0
+        if validation_split > 0.0 and validation_split < 1.0:
+            val_size = int(n_samples * validation_split)
+            X_val, y_val = X_shuffled[:val_size], y_shuffled[:val_size]
+            X_train, y_train = X_shuffled[val_size:], y_shuffled[val_size:]
+        else:
+            # Use all data for training if no validation
+            X_train, y_train = X_shuffled, y_shuffled
+            X_val, y_val = None, None
+        
+        # Initialize loss history arrays
+        train_losses = []
+        val_losses = []
+        
+        # Training loop
+        for epoch in range(epochs):
+            # Shuffle training data for each epoch
+            train_indices = np.random.permutation(len(X_train))
+            X_train_shuffled = X_train[train_indices]
+            y_train_shuffled = y_train[train_indices]
+            
+            # Calculate and store the training loss before this epoch's updates
+            train_pred = self.predict(X_train)
+            train_loss = self._mean_squared_error(y_train, train_pred)
+            train_losses.append(train_loss)
+            
+            # Perform forward and backward propagation for each sample in the training batch
+            for i in range(len(X_train)):
+                # Forward propagation
+                _ = self.forward_propagation(X_train_shuffled[i:i+1])
+                
+                # Backward propagation
+                self.backward_propagation(X_train_shuffled[i:i+1], y_train_shuffled[i:i+1])
+                
+                # Update weights and thresholds
+                self.update_weights_and_thresholds()
+            
+            # Calculate and store validation loss if validation data is available
+            if X_val is not None:
+                val_pred = self.predict(X_val)
+                val_loss = self._mean_squared_error(y_val, val_pred)
+                val_losses.append(val_loss)
+            else:
+                # If no validation data, append NaN or the same as training loss
+                val_losses.append(np.nan)
+            
+            # Print progress every 10% of epochs
+            if (epoch + 1) % max(1, epochs // 10) == 0:
+                print(f"Epoch {epoch + 1}/{epochs}, Training Loss: {train_loss:.6f}, "
+                      f"Validation Loss: {val_losses[-1]:.6f if not np.isnan(val_losses[-1]) else 'N/A'}")
+        
+        return train_losses, val_losses
+    
+    def _mean_squared_error(self, y_true, y_pred):
+        """
+        Calculate mean squared error
+        :param y_true: True target values
+        :param y_pred: Predicted values
+        :return: Mean squared error
+        """
+        return np.mean((y_true - y_pred) ** 2)
