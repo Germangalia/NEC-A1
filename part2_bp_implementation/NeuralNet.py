@@ -192,6 +192,7 @@ class NeuralNet:
             self.d_w[l] = -self.learning_rate * np.dot(self.delta[l], self.xi[l-1].T)
             
             # Add momentum term: d_w[l] = d_w[l] + momentum * d_w_prev[l]
+            # Ensure the dimensions match before adding
             self.d_w[l] += self.momentum * self.d_w_prev[l]
             
             # Update weights: w[l] = w[l] + d_w[l]
@@ -199,6 +200,10 @@ class NeuralNet:
             
             # Calculate threshold (bias) changes: d_theta[l] = -learning_rate * delta[l]
             self.d_theta[l] = -self.learning_rate * self.delta[l]
+            
+            # Reshape d_theta to match the stored array dimensions if needed
+            if self.d_theta[l].shape != self.d_theta_prev[l].shape:
+                self.d_theta[l] = self.d_theta[l].reshape(self.d_theta_prev[l].shape)
             
             # Add momentum term: d_theta[l] = d_theta[l] + momentum * d_theta_prev[l]
             self.d_theta[l] += self.momentum * self.d_theta_prev[l]
@@ -281,8 +286,9 @@ class NeuralNet:
             
             # Print progress every 10% of epochs
             if (epoch + 1) % max(1, epochs // 10) == 0:
+                val_loss_str = f"{self.val_loss_history[-1]:.6f}" if not np.isnan(self.val_loss_history[-1]) else 'N/A'
                 print(f"Epoch {epoch + 1}/{epochs}, Training Loss: {train_loss:.6f}, "
-                      f"Validation Loss: {self.val_loss_history[-1]:.6f if not np.isnan(self.val_loss_history[-1]) else 'N/A'}")
+                      f"Validation Loss: {val_loss_str}")
         
         return self.train_loss_history, self.val_loss_history
     
