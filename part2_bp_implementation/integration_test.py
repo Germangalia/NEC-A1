@@ -6,50 +6,68 @@ import pickle
 def load_preprocessed_data():
     """
     Load preprocessed data from part1_preprocessing
-    This is a placeholder function - actual implementation would depend on how data was saved
     """
-    # For this example, we'll generate sample data that matches the requirements
-    # The actual implementation would load the preprocessed data from part1_preprocessing
+    import pandas as pd
+    import os
     
-    # Generate sample data with 10 features to match the shopping dataset requirement
-    np.random.seed(42)
-    n_samples = 1000
+    # First, try to load the actual dataset from the provided file
+    dataset_path = "../dataset/shopping_behavior.csv"
     
-    # Simulated features similar to shopping dataset
-    age = np.random.randint(18, 70, n_samples)
-    gender = np.random.choice([0, 1], n_samples)  # 0: Female, 1: Male
-    category = np.random.choice([0, 1, 2, 3], n_samples)  # 4 categories
-    location = np.random.choice(range(50), n_samples)  # 50 locations
-    review_rating = np.random.uniform(1, 5, n_samples)
-    subscription_status = np.random.choice([0, 1], n_samples)  # 0: No, 1: Yes
-    discount_applied = np.random.choice([0, 1], n_samples)  # 0: No, 1: Yes
-    previous_purchases = np.random.randint(0, 50, n_samples)
-    payment_method = np.random.choice([0, 1, 2, 3], n_samples)  # 4 payment methods
-    frequency = np.random.choice([0, 1, 2], n_samples)  # 3 frequency types
-    
-    # Combine features into X
-    X = np.column_stack([
-        age, gender, category, location, review_rating,
-        subscription_status, discount_applied, previous_purchases,
-        payment_method, frequency
-    ])
-    
-    # Simulated target - purchase amount (continuous value)
-    y = (
-        0.05 * age + 
-        5 * gender + 
-        10 * category/3 + 
-        2 * review_rating + 
-        15 * subscription_status + 
-        8 * discount_applied + 
-        0.3 * previous_purchases + 
-        np.random.normal(0, 5, n_samples)  # Add some noise
-    ).reshape(-1, 1)
-    
-    # Normalize target to reasonable purchase amounts
-    y = np.abs(y) + 20  # Ensure positive values and reasonable base amount
-    
-    return X, y
+    if os.path.exists(dataset_path):
+        # Load the actual dataset
+        df = pd.read_csv(dataset_path)
+        print(f"Dataset loaded successfully with shape: {df.shape}")
+        
+        # Display basic info about the dataset
+        print("Dataset columns:", df.columns.tolist())
+        print("First few rows:")
+        print(df.head())
+        
+        # Select relevant features for the model
+        # Based on the requirements, we need at least 10 input features and 1 output feature
+        # The target variable is "Purchase Amount (USD)"
+        
+        # Handle categorical variables by encoding them
+        df_encoded = df.copy()
+        
+        # Encode categorical variables
+        categorical_columns = ['Gender', 'Item Purchased', 'Category', 'Location', 
+                              'Subscription Status', 'Discount Applied', 'Payment Method', 
+                              'Frequency of Purchases']
+        
+        from sklearn.preprocessing import LabelEncoder
+        label_encoders = {}
+        
+        for col in categorical_columns:
+            if col in df_encoded.columns:
+                le = LabelEncoder()
+                df_encoded[col] = le.fit_transform(df_encoded[col].astype(str))
+                label_encoders[col] = le
+        
+        # Define features (input) and target (output)
+        feature_columns = ['Age', 'Gender', 'Item Purchased', 'Category', 'Location',
+                          'Review Rating', 'Subscription Status', 'Discount Applied',
+                          'Previous Purchases', 'Payment Method', 'Frequency of Purchases']
+        
+        # Filter to only include columns that exist in the dataset
+        available_features = [col for col in feature_columns if col in df_encoded.columns]
+        
+        X = df_encoded[available_features].values
+        y = df_encoded['Purchase Amount (USD)'].values.reshape(-1, 1)
+        
+        print(f"Features used: {available_features}")
+        print(f"Feature matrix shape: {X.shape}")
+        print(f"Target vector shape: {y.shape}")
+        
+        return X, y
+    else:
+        print(f"Dataset file not found at {dataset_path}")
+        print("The dataset needs to be downloaded or accessed.")
+        
+        # If kagglehub is not available, show an error and stop execution
+        print("Error: Dataset file not found and kagglehub is not available.")
+        print("Please ensure the dataset file exists at the specified location.")
+        raise FileNotFoundError(f"Dataset file not found at {dataset_path}")
 
 def integrate_with_preprocessed_data():
     """
@@ -81,9 +99,13 @@ def integrate_with_preprocessed_data():
     print(f"Training set - X: {X_train.shape}, y: {y_train.shape}")
     print(f"Test set - X: {X_test.shape}, y: {y_test.shape}")
     
+    # Get the number of features from the dataset
+    n_features = X_train.shape[1]
+    print(f"Number of features in dataset: {n_features}")
+    
     # Create and configure the neural network
-    # For this example: 10 input features, 2 hidden layers with 15 and 8 neurons, 1 output
-    layers = [10, 15, 8, 1]
+    # Using n_features input nodes to match the actual dataset
+    layers = [n_features, 15, 8, 1]  # [input_size, hidden1, hidden2, output]
     nn = NeuralNet(
         layers=layers,
         learning_rate=0.01,
