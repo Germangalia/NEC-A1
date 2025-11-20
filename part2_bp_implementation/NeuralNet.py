@@ -180,3 +180,32 @@ class NeuralNet:
             # Calculate error for layer l
             # delta[l] = (w[l+1]^T * delta[l+1]) * derivative of activation at layer l
             self.delta[l] = np.dot(self.w[l+1].T, self.delta[l+1]) * self.activation_derivative(self.h[l])
+    
+    def update_weights_and_thresholds(self):
+        """
+        Update weights and thresholds using calculated deltas and momentum
+        """
+        # Update weights and thresholds for each layer from 1 to L-1 (input layer doesn't have weights)
+        for l in range(1, self.L):
+            # Calculate weight changes: d_w[l] = -learning_rate * (delta[l] * xi[l-1]^T) 
+            # This is the gradient descent update without momentum for now
+            self.d_w[l] = -self.learning_rate * np.dot(self.delta[l], self.xi[l-1].T)
+            
+            # Add momentum term: d_w[l] = d_w[l] + momentum * d_w_prev[l]
+            self.d_w[l] += self.momentum * self.d_w_prev[l]
+            
+            # Update weights: w[l] = w[l] + d_w[l]
+            self.w[l] += self.d_w[l]
+            
+            # Calculate threshold (bias) changes: d_theta[l] = -learning_rate * delta[l]
+            self.d_theta[l] = -self.learning_rate * self.delta[l]
+            
+            # Add momentum term: d_theta[l] = d_theta[l] + momentum * d_theta_prev[l]
+            self.d_theta[l] += self.momentum * self.d_theta_prev[l]
+            
+            # Update thresholds: theta[l] = theta[l] + d_theta[l]
+            self.theta[l] += self.d_theta[l]
+            
+            # Store current changes for next iteration's momentum
+            self.d_w_prev[l] = self.d_w[l].copy()
+            self.d_theta_prev[l] = self.d_theta[l].copy()
