@@ -158,3 +158,25 @@ class NeuralNet:
         
         # Return the output of the last layer (transposed back to (n_samples, n_outputs))
         return self.xi[self.L-1].T
+    
+    def backward_propagation(self, X, y):
+        """
+        Perform backward propagation algorithm
+        :param X: Input data of shape (n_samples, n_features)
+        :param y: Target values of shape (n_samples, n_outputs)
+        """
+        # Ensure y is in the right shape
+        y = y.T if len(y.shape) > 1 else y.reshape(-1, 1)  # Transpose to match (n_outputs, n_samples)
+        
+        # Forward propagate to compute activations
+        _ = self.forward_propagation(X)
+        
+        # Calculate output layer error (delta)
+        # For the output layer (L-1), delta = (predicted - actual) * derivative of activation
+        self.delta[self.L-1] = (self.xi[self.L-1] - y) * self.activation_derivative(self.h[self.L-1])
+        
+        # Backpropagate the error through the layers (from L-2 down to 1)
+        for l in range(self.L-2, 0, -1):
+            # Calculate error for layer l
+            # delta[l] = (w[l+1]^T * delta[l+1]) * derivative of activation at layer l
+            self.delta[l] = np.dot(self.w[l+1].T, self.delta[l+1]) * self.activation_derivative(self.h[l])
