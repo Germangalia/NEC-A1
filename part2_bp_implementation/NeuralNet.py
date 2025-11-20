@@ -294,3 +294,18 @@ class NeuralNet:
         :return: Mean squared error
         """
         return np.mean((y_true - y_pred) ** 2)
+    
+    def predict(self, X):
+        """
+        Make predictions using the trained neural network
+        :param X: Input data of shape (n_samples, n_features)
+        :return: Predicted values of shape (n_samples, n_outputs)
+        """
+        # Convert to numpy array if not already
+        X = np.array(X)
+        
+        # Perform forward propagation to get predictions
+        predictions = self.forward_propagation(X)
+        
+        # Return the predictions, ensuring they're the right shape
+        return predictions if predictions.shape[0] > 1 else predictions.ravel()
