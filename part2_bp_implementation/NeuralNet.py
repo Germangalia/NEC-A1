@@ -1,13 +1,15 @@
 import numpy as np
 
 class NeuralNet:
-    def __init__(self, layers, learning_rate=0.01, momentum=0.0, fact='sigmoid'):
+    def __init__(self, layers, learning_rate=0.01, momentum=0.0, fact='sigmoid', l1_reg=0.0, l2_reg=0.0):
         """
         Initialize the neural network
         :param layers: Array with number of units in each layer, e.g. [4, 9, 5, 1] means 4 layers with 4 input units and 1 output unit
         :param learning_rate: Learning rate
         :param momentum: Momentum term
         :param fact: Activation function ('sigmoid', 'relu', 'linear', 'tanh')
+        :param l1_reg: L1 regularization parameter (default 0.0, no regularization)
+        :param l2_reg: L2 regularization parameter (default 0.0, no regularization)
         """
         # L: Number of layers
         self.L = len(layers)
@@ -67,6 +69,9 @@ class NeuralNet:
         self.fact = fact
         self.learning_rate = learning_rate
         self.momentum = momentum
+        # Regularization parameters
+        self.l1_reg = l1_reg  # L1 regularization parameter
+        self.l2_reg = l2_reg  # L2 regularization parameter
         
     def activation_function(self, x):
         """
@@ -191,6 +196,14 @@ class NeuralNet:
             # This is the gradient descent update without momentum for now
             self.d_w[l] = -self.learning_rate * np.dot(self.delta[l], self.xi[l-1].T)
             
+            # Add regularization terms to weight updates
+            # L1 regularization: sign(w) * lambda
+            # L2 regularization: w * lambda
+            if self.l1_reg > 0:
+                self.d_w[l] -= self.learning_rate * self.l1_reg * np.sign(self.w[l])
+            if self.l2_reg > 0:
+                self.d_w[l] -= self.learning_rate * self.l2_reg * self.w[l]
+            
             # Add momentum term: d_w[l] = d_w[l] + momentum * d_w_prev[l]
             # Ensure the dimensions match before adding
             self.d_w[l] += self.momentum * self.d_w_prev[l]
@@ -294,12 +307,26 @@ class NeuralNet:
     
     def _mean_squared_error(self, y_true, y_pred):
         """
-        Calculate mean squared error
+        Calculate mean squared error with optional regularization terms
         :param y_true: True target values
         :param y_pred: Predicted values
-        :return: Mean squared error
+        :return: Mean squared error plus regularization terms if applicable
         """
-        return np.mean((y_true - y_pred) ** 2)
+        mse = np.mean((y_true - y_pred) ** 2)
+        
+        # Add regularization terms to the loss
+        reg_loss = 0.0
+        if self.l1_reg > 0:
+            # Add L1 regularization term: sum of absolute weights
+            for l in range(1, self.L):
+                reg_loss += self.l1_reg * np.sum(np.abs(self.w[l]))
+        
+        if self.l2_reg > 0:
+            # Add L2 regularization term: sum of squared weights
+            for l in range(1, self.L):
+                reg_loss += self.l2_reg * np.sum(self.w[l] ** 2)
+        
+        return mse + reg_loss
     
     def predict(self, X):
         """
