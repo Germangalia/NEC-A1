@@ -196,13 +196,15 @@ class NeuralNet:
             # This is the gradient descent update without momentum for now
             self.d_w[l] = -self.learning_rate * np.dot(self.delta[l], self.xi[l-1].T)
             
-            # Add regularization terms to weight updates
-            # L1 regularization: sign(w) * lambda
-            # L2 regularization: w * lambda
-            if self.l1_reg > 0:
-                self.d_w[l] -= self.learning_rate * self.l1_reg * np.sign(self.w[l])
+            # Add regularization terms to weight updates (as part of the gradient)
+            # For L2 regularization: add -lambda * w to the gradient (weight decay)
+            # For L1 regularization: add -lambda * sign(w) to the gradient
             if self.l2_reg > 0:
                 self.d_w[l] -= self.learning_rate * self.l2_reg * self.w[l]
+            if self.l1_reg > 0:
+                # Use a small epsilon to prevent issues with sign function at zero
+                epsilon = 1e-8
+                self.d_w[l] -= self.learning_rate * self.l1_reg * np.sign(self.w[l] + epsilon)
             
             # Add momentum term: d_w[l] = d_w[l] + momentum * d_w_prev[l]
             # Ensure the dimensions match before adding
@@ -212,6 +214,7 @@ class NeuralNet:
             self.w[l] += self.d_w[l]
             
             # Calculate threshold (bias) changes: d_theta[l] = -learning_rate * delta[l]
+            # Note: Regularization is typically NOT applied to biases/thresholds
             self.d_theta[l] = -self.learning_rate * self.delta[l]
             
             # Reshape d_theta to match the stored array dimensions if needed
@@ -307,10 +310,19 @@ class NeuralNet:
     
     def _mean_squared_error(self, y_true, y_pred):
         """
-        Calculate mean squared error with optional regularization terms
+        Calculate mean squared error (for reporting purposes, without regularization)
         :param y_true: True target values
         :param y_pred: Predicted values
-        :return: Mean squared error plus regularization terms if applicable
+        :return: Mean squared error
+        """
+        return np.mean((y_true - y_pred) ** 2)
+    
+    def _regularized_loss(self, y_true, y_pred):
+        """
+        Calculate total loss including regularization terms (for internal use during training)
+        :param y_true: True target values
+        :param y_pred: Predicted values
+        :return: Total loss including regularization terms
         """
         mse = np.mean((y_true - y_pred) ** 2)
         
