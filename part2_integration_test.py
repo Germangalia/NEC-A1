@@ -2,94 +2,96 @@ import numpy as np
 from part2_bp_implementation.NeuralNet import NeuralNet
 
 
-def load_pre_data():
-    # TODO: check paths, not sure if these files are already generated
-    X_tv = np.load("./data_proc/tmp/X_tv.npy")
-    y_tv = np.load("./data_proc/tmp/y_tv.npy")
-    X_tst = np.load("./data_proc/tmp/X_tst.npy")
-    y_tst = np.load("./data_proc/tmp/y_tst.npy")
+def load_preprocessed_data():
+    X_train_val = np.load("./dataset/preprocessed/X_train_val.npy")
+    y_train_val = np.load("./dataset/preprocessed/y_train_val.npy")
+    X_test = np.load("./dataset/preprocessed/X_test.npy")
+    y_test = np.load("./dataset/preprocessed/y_test.npy")
 
-    if y_tv.ndim == 1:
-        y_tv = y_tv.reshape(-1, 1)
-    if y_tst.ndim == 1:
-        y_tst = y_tst.reshape(-1, 1)
+    if y_train_val.ndim == 1:
+        y_train_val = y_train_val.reshape(-1, 1)
+    if y_test.ndim == 1:
+        y_test = y_test.reshape(-1, 1)
 
-    print(f"train_val shapes: {X_tv.shape}, {y_tv.shape}")
-    print(f"test shapes: {X_tst.shape}, {y_tst.shape}")
+    print(f"Train+val X shape: {X_train_val.shape}, y shape: {y_train_val.shape}")
+    print(f"Test      X shape: {X_test.shape}, y shape: {y_test.shape}")
 
-    return X_tv, y_tv, X_tst, y_tst
+    return X_train_val, y_train_val, X_test, y_test
 
 
-def integrate_data():
-    X_tv, y_tv, X_tst, y_tst = load_pre_data()
+def integrate_with_preprocessed_data():
+    X_train_val, y_train_val, X_test, y_test = load_preprocessed_data()
 
-    y_m = y_tv.mean(axis=0)
-    y_s = y_tv.std(axis=0)
-    y_s[y_s == 0] = 1
+    y_mean = y_train_val.mean(axis=0)
+    y_std = y_train_val.std(axis=0)
+    y_std[y_std == 0] = 1.0
 
-    y_tv_s = (y_tv - y_m) / y_s
-    y_tst_s = (y_tst - y_m) / y_s
+    y_train_val_scaled = (y_train_val - y_mean) / y_std
+    y_test_scaled = (y_test - y_mean) / y_std
 
-    print("output scaling:")
-    print(" mean:", y_m)
-    print(" std :", y_s)
+    print("Output standardization:")
+    print(f"  y_mean: {y_mean}")
+    print(f"  y_std : {y_std}")
 
-    feats = X_tv.shape[1]
-    layers_cfg = [feats, 10, 6, 1]
+    n_features = X_train_val.shape[1]
+    layers = [n_features, 15, 8, 1]
 
-    #TODO Check files
-    net = NeuralNet(
-        layers=layers_cfg,
-        learning_rate=0.015,
-        momentum=0.8,
-        fact="sigm",            # TODO verify implementation
+    nn = NeuralNet(
+        layers=layers,
+        learning_rate=0.01,
+        momentum=0.9,
+        fact="sigmoid",
         l1_reg=0.0,
         l2_reg=0.0,
     )
 
-    print("Current architecture:", layers_cfg)
-    print("lr:", net.learning_rate, "mom:", net.momentum)
+    print(f"Neural network architecture (layers): {layers}")
+    print(f"Learning rate: {nn.learning_rate}, Momentum: {nn.momentum}, Activation: {nn.fact}")
 
-    ep = 30  # provisional, probably too few
+    epochs = 50
 
-    print("Training (still without early stopping)...")
-    tr_loss, vl_loss = net.fit(
-        X=X_tv,
-        y=y_tv_s,
-        epochs=ep,
-        validation_split=0.25,
+    print("Starting training...")
+    train_losses, val_losses = nn.fit(
+        X=X_train_val,
+        y=y_train_val_scaled,
+        epochs=epochs,
+        validation_split=0.2,
     )
-    print("Training finished (early version).")
+    print("Training completed.")
 
-    print("Predicting on test set...")
-    y_pred_s = net.predict(X_tst)
+    print("Making predictions on test set...")
+    y_pred_scaled = nn.predict(X_test)
 
-    if y_pred_s.ndim == 1:
-        y_pred_s = y_pred_s.reshape(-1, 1)
+    if y_pred_scaled.ndim == 1:
+        y_pred_scaled = y_pred_scaled.reshape(-1, 1)
 
-    y_pred = y_pred_s * y_s + y_m
+    y_pred = y_pred_scaled * y_std + y_mean
+    y_test_original = y_test
 
-    mse = float(np.mean((y_tst - y_pred)**2))
-    mae = float(np.mean(np.abs(y_tst - y_pred)))
-    # dividing by zero here may cause issues, needs correction later
-    mape = float(np.mean(np.abs((y_tst - y_pred) / (y_tst + 1e-9))) * 100)
+    mse = float(np.mean((y_test_original - y_pred) ** 2))
+    mae = float(np.mean(np.abs(y_test_original - y_pred)))
+    mape = float(np.mean(np.abs((y_test_original - y_pred) / y_test_original)) * 100)
 
-    print("Performance (initial version):")
-    print(" MSE :", mse)
-    print(" MAE :", mae)
-    print(" MAPE:", mape)
+    print("Test set performance (custom BP):")
+    print(f"  MSE : {mse:.4f}")
+    print(f"  MAE : {mae:.4f}")
+    print(f"  MAPE: {mape:.4f}%")
 
-    hist_tr, hist_val = net.loss_epochs()
-    print("history shapes:", hist_tr.shape, hist_val.shape)
+    train_error_evolution, val_error_evolution = nn.loss_epochs()
+    print(
+        f"Loss evolution shapes - Train: {train_error_evolution.shape}, "
+        f"Val: {val_error_evolution.shape}"
+    )
 
     return (
-        net,
-        (X_tv, X_tst, y_tv_s, y_tst_s),
-        (tr_loss, vl_loss),
+        nn,
+        (X_train_val, X_test, y_train_val_scaled, y_test_scaled),
+        (train_losses, val_losses),
         (mse, mae, mape),
     )
 
 
 if __name__ == "__main__":
-    model, data, losses, metrics = integrate_data()
-    print("Preliminary integration completed.")
+    model, data, losses, metrics = integrate_with_preprocessed_data()
+    print("\nIntegration with preprocessed data completed successfully.")
+    print("The custom BP model has been trained and evaluated on the test set.")
