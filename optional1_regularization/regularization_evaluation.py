@@ -1,272 +1,302 @@
-import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_squared_error, mean_absolute_error
 
-# Add path to access the custom BP implementation from Part 2
-sys.path.append('../part2_bp_implementation/')
-from NeuralNet import NeuralNet
+from part2_bp_implementation.NeuralNet import NeuralNet
 
-def calculate_mape(y_true, y_pred):
-    """Calculate Mean Absolute Percentage Error"""
-    y_true, y_pred = np.array(y_true), np.array(y_pred)
-    non_zero_true = y_true != 0
-    # Avoid division by zero by only calculating MAPE for non-zero true values
-    mape = np.mean(np.abs((y_true[non_zero_true] - y_pred[non_zero_true]) / y_true[non_zero_true])) * 100
-    return mape
 
-# Load the dataset
-dataset_path = "../dataset/shopping_behavior.csv"
-df = pd.read_csv(dataset_path)
+def load_preprocessed_data():
+    """
+    Load the preprocessed train+validation and test sets from Part 1.
 
-print(f'Dataset loaded successfully with shape: {df.shape}')
-print('Dataset columns:', df.columns.tolist())
+    This ensures that the regularization study uses the same data splits
+    as Part 2 (BP), Part 3 (model comparison) and the parameter_tuning script.
+    """
 
-# Data preprocessing for models
-# Identify numerical and categorical columns
-numerical_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-categorical_cols = df.select_dtypes(include=['object']).columns.tolist()
+    X_train_val = np.load("./../dataset/preprocessed/X_train_val.npy")
+    y_train_val = np.load("./../dataset/preprocessed/y_train_val.npy")
+    X_test = np.load("./../dataset/preprocessed/X_test.npy")
+    y_test = np.load("./../dataset/preprocessed/y_test.npy")
 
-# Remove target variable from features if it's in the numerical columns
-target_col = 'Purchase Amount (USD)'
-if target_col in numerical_cols:
-    numerical_cols.remove(target_col)
+    if y_train_val.ndim == 1:
+        y_train_val = y_train_val.reshape(-1, 1)
+    if y_test.ndim == 1:
+        y_test = y_test.reshape(-1, 1)
 
-# Separate features (X) and target variable (y)
-X = df[numerical_cols + categorical_cols]
-y = df[target_col]
+    return X_train_val, y_train_val, X_test, y_test
 
-# One-hot encode categorical variables
-X_encoded = pd.get_dummies(X, columns=categorical_cols, prefix=categorical_cols)
 
-# Split the dataset into training (80%) and testing (20%) sets
-X_train, X_test, y_train, y_test = train_test_split(X_encoded, y, test_size=0.2, random_state=42)
+def regression_metrics(y_true, y_pred):
+    """
+    Compute MSE, MAE and MAPE between y_true and y_pred in original units.
+    """
 
-# Standardize the features
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+    y_true = np.asarray(y_true).reshape(-1, 1)
+    y_pred = np.asarray(y_pred).reshape(-1, 1)
 
-# Prepare data for the custom BP model (reshape if needed)
-X_train_bp = X_train_scaled.astype(np.float32)
-X_test_bp = X_test_scaled.astype(np.float32)
-y_train_bp = y_train.values.astype(np.float32)
-y_test_bp = y_test.values.astype(np.float32)
+    mse = float(np.mean((y_true - y_pred) ** 2))
+    mae = float(np.mean(np.abs(y_true - y_pred)))
+    eps = 1e-8
+    mape = float(np.mean(np.abs((y_true - y_pred) / (y_true + eps))) * 100.0)
 
-print("\n--- Regularization Evaluation: Comparing Regularized vs Non-Regularized Models ---")
+    return mse, mae, mape
 
-# Define models to compare
-model_configs = [
-    {
-        "name": "No Regularization",
-        "params": {
-            "layers": [X_train_bp.shape[1], 20, 10, 1],
-            "learning_rate": 0.01,
-            "momentum": 0.5,
-            "fact": 'relu',
-            "l1_reg": 0.0,
-            "l2_reg": 0.0
-        }
-    },
-    {
-        "name": "L2 Regularization (0.001)",
-        "params": {
-            "layers": [X_train_bp.shape[1], 20, 10, 1],
-            "learning_rate": 0.01,
-            "momentum": 0.5,
-            "fact": 'relu',
-            "l1_reg": 0.0,
-            "l2_reg": 0.001
-        }
-    },
-    {
-        "name": "L1 Regularization (0.001)",
-        "params": {
-            "layers": [X_train_bp.shape[1], 20, 10, 1],
-            "learning_rate": 0.01,
-            "momentum": 0.5,
-            "fact": 'relu',
-            "l1_reg": 0.001,
-            "l2_reg": 0.0
-        }
-    },
-    {
-        "name": "L1+L2 Regularization (0.0001 each)",
-        "params": {
-            "layers": [X_train_bp.shape[1], 20, 10, 1],
-            "learning_rate": 0.01,
-            "momentum": 0.5,
-            "fact": 'relu',
-            "l1_reg": 0.0001,
-            "l2_reg": 0.0001
-        }
-    }
-]
 
-# Train and evaluate all models
-models = {}
-evaluations = []
+def train_and_evaluate_model(
+    name,
+    l1_reg,
+    l2_reg,
+    X_train_val,
+    y_train_val_scaled,
+    X_test,
+    y_test_scaled,
+    y_train_original,
+    y_test_original,
+    y_mean,
+    y_std,
+    epochs=100,
+):
+    """
+    Train one BP model with a specific regularization configuration
+    and compute detailed diagnostics.
 
-for config in model_configs:
-    print(f"\nTraining model: {config['name']}")
-    
-    # Create and configure the neural network
-    nn = NeuralNet(**config['params'])
-    
-    # Train the model
-    nn.fit(X_train_bp, y_train_bp, epochs=100, validation_split=0.2)
-    
-    # Store the trained model
-    models[config['name']] = nn
-    
-    # Get predictions
-    y_train_pred = nn.predict(X_train_bp)
-    y_test_pred = nn.predict(X_test_bp)
-    
-    # Calculate metrics
-    train_mse = mean_squared_error(y_train_bp, y_train_pred)
-    test_mse = mean_squared_error(y_test_bp, y_test_pred)
-    
-    train_mae = mean_absolute_error(y_train_bp, y_train_pred)
-    test_mae = mean_absolute_error(y_test_bp, y_test_pred)
-    
-    train_mape = calculate_mape(y_train_bp, y_train_pred)
-    test_mape = calculate_mape(y_test_bp, y_test_pred)
-    
-    # Calculate total weights magnitude for regularization analysis
-    total_weights_magnitude = 0.0
+    Outputs:
+    - Train and test MSE/MAE/MAPE (in original units).
+    - Overall weight magnitude (sum |w|, sum w^2).
+    - Difference between train and test errors to quantify overfitting.
+    - Final network and test predictions (for scatter plots).
+    """
+
+    # -------------------------------------------------------------------------
+    # Step 1: Define network architecture and regularization
+    # -------------------------------------------------------------------------
+    n_features = X_train_val.shape[1]
+    layers = [n_features, 20, 10, 1]
+
+    nn = NeuralNet(
+        layers=layers,
+        learning_rate=0.01,
+        momentum=0.5,
+        fact="relu",
+        l1_reg=l1_reg,
+        l2_reg=l2_reg,
+    )
+
+    print(f"\nTraining model: {name} (L1={l1_reg}, L2={l2_reg})")
+
+    # -------------------------------------------------------------------------
+    # Step 2: Train the network with standardized outputs
+    # -------------------------------------------------------------------------
+    nn.fit(
+        X_train_val,
+        y_train_val_scaled,
+        epochs=epochs,
+        validation_split=0.2,
+    )
+
+    # -------------------------------------------------------------------------
+    # Step 3: Compute predictions for train+val and test
+    # -------------------------------------------------------------------------
+    y_train_pred_scaled = nn.predict(X_train_val)
+    y_test_pred_scaled = nn.predict(X_test)
+
+    if y_train_pred_scaled.ndim == 1:
+        y_train_pred_scaled = y_train_pred_scaled.reshape(-1, 1)
+    if y_test_pred_scaled.ndim == 1:
+        y_test_pred_scaled = y_test_pred_scaled.reshape(-1, 1)
+
+    # Descale back to original units
+    y_train_pred = y_train_pred_scaled * y_std + y_mean
+    y_test_pred = y_test_pred_scaled * y_std + y_mean
+
+    # -------------------------------------------------------------------------
+    # Step 4: Compute train and test metrics (MSE, MAE, MAPE)
+    # -------------------------------------------------------------------------
+    train_mse, train_mae, train_mape = regression_metrics(
+        y_train_original, y_train_pred
+    )
+    test_mse, test_mae, test_mape = regression_metrics(
+        y_test_original, y_test_pred
+    )
+
+    # -------------------------------------------------------------------------
+    # Step 5: Compute weight magnitudes and overfitting indicators
+    # -------------------------------------------------------------------------
+    total_abs_weights = 0.0
+    total_sq_weights = 0.0
     for l in range(1, nn.L):
-        total_weights_magnitude += np.sum(np.abs(nn.w[l]))
-    
-    # Calculate weight variance for regularization analysis
-    weight_variance = 0.0
-    for l in range(1, nn.L):
-        weight_variance += np.sum(nn.w[l] ** 2)
-    
-    # Overfitting measure (difference between train and test error)
-    mse_diff = train_mse - test_mse
-    mae_diff = train_mae - test_mae
-    
-    evaluations.append({
-        "Model": config['name'],
+        total_abs_weights += np.sum(np.abs(nn.w[l]))
+        total_sq_weights += np.sum(nn.w[l] ** 2)
+
+    mse_diff = abs(train_mse - test_mse)
+    mae_diff = abs(train_mae - test_mae)
+
+    return {
+        "Model": name,
+        "L1_reg": l1_reg,
+        "L2_reg": l2_reg,
         "Train MSE": train_mse,
         "Test MSE": test_mse,
         "Train MAE": train_mae,
         "Test MAE": test_mae,
         "Train MAPE": train_mape,
         "Test MAPE": test_mape,
-        "Total Weights Magnitude": total_weights_magnitude,
-        "Weight Variance": weight_variance,
-        "MSE Difference (Train-Test)": abs(mse_diff),
-        "MAE Difference (Train-Test)": abs(mae_diff)
-    })
-    
-    print(f"  Train MSE: {train_mse:.4f}, Test MSE: {test_mse:.4f}")
-    print(f"  Train MAE: {train_mae:.4f}, Test MAE: {test_mae:.4f}")
-    print(f"  Train MAPE: {train_mape:.4f}%, Test MAPE: {test_mape:.4f}%")
-    print(f"  Total Weights Magnitude: {total_weights_magnitude:.4f}")
-    print(f"  Weight Variance: {weight_variance:.4f}")
-    print(f"  MSE Difference (Train-Test): {abs(mse_diff):.4f}")
+        "Total |w|": total_abs_weights,
+        "Total w^2": total_sq_weights,
+        "MSE diff (train-test)": mse_diff,
+        "MAE diff (train-test)": mae_diff,
+        # Objects used later for scatter plots
+        "nn": nn,
+        "y_test_pred": y_test_pred,
+    }
 
-# Create a summary table
-import pandas as pd
-evaluations_df = pd.DataFrame(evaluations)
-print("\n--- Regularization Evaluation Results ---")
-print(evaluations_df.round(4))
 
-# Find best model based on test MSE
-best_model_idx = evaluations_df["Test MSE"].idxmin()
-best_model = evaluations_df.iloc[best_model_idx]
-print(f"\nBest model based on test MSE: {best_model['Model']}")
-print(f"Test MSE: {best_model['Test MSE']:.4f}, Test MAE: {best_model['Test MAE']:.4f}, Test MAPE: {best_model['Test MAPE']:.4f}%")
+def main():
+    """
+    Evaluate the effect of regularization on a small set of representative models.
 
-# Analysis of regularization effectiveness
-print(f"\n--- Regularization Effectiveness Analysis ---")
-no_reg_row = evaluations_df[evaluations_df["Model"] == "No Regularization"].iloc[0]
+    Requirement mapping (Optional 1):
+    - Compare at least:
+        * a model without regularization,
+        * one with only L2,
+        * one with only L1,
+        * and one with combined L1+L2.
+    - Analyse:
+        * test performance (MSE, MAE, MAPE),
+        * magnitude of weights,
+        * overfitting (difference between train and test errors).
+    - Produce plots for the written report (bars and scatter plots).
+    """
 
-for _, row in evaluations_df.iterrows():
-    if row["Model"] == "No Regularization":
-        continue
-    
-    # Compare test performance
-    mse_improvement = (no_reg_row["Test MSE"] - row["Test MSE"]) / no_reg_row["Test MSE"] * 100
-    mae_improvement = (no_reg_row["Test MAE"] - row["Test MAE"]) / no_reg_row["Test MAE"] * 100
-    
-    # Compare overfitting (smaller difference between train and test is better)
-    overfitting_reduction = (no_reg_row["MSE Difference (Train-Test)"] - row["MSE Difference (Train-Test)"]) / no_reg_row["MSE Difference (Train-Test)"] * 100
-    
-    # Compare weight magnitudes
-    weight_reduction = (no_reg_row["Total Weights Magnitude"] - row["Total Weights Magnitude"]) / no_reg_row["Total Weights Magnitude"] * 100
-    
-    print(f"\n{row['Model']}:")
-    print(f"  Test MSE improvement over no regularization: {mse_improvement:.2f}%")
-    print(f"  Test MAE improvement over no regularization: {mae_improvement:.2f}%")
-    print(f"  Overfitting reduction: {overfitting_reduction:.2f}%")
-    print(f"  Weight magnitude reduction: {weight_reduction:.2f}%")
+    np.random.seed(0)
 
-# Create visualization comparing models
-fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    # -------------------------------------------------------------------------
+    # Step 1: Load data and standardize output (same as other parts)
+    # -------------------------------------------------------------------------
+    X_train_val, y_train_val, X_test, y_test = load_preprocessed_data()
 
-# Plot 1: Test MSE comparison
-axes[0, 0].bar(evaluations_df["Model"], evaluations_df["Test MSE"])
-axes[0, 0].set_title("Test MSE Comparison")
-axes[0, 0].set_ylabel("MSE")
-axes[0, 0].tick_params(axis='x', rotation=45)
+    y_mean = y_train_val.mean(axis=0)
+    y_std = y_train_val.std(axis=0)
+    y_std[y_std == 0] = 1.0
 
-# Plot 2: Test MAE comparison
-axes[0, 1].bar(evaluations_df["Model"], evaluations_df["Test MAE"])
-axes[0, 1].set_title("Test MAE Comparison")
-axes[0, 1].set_ylabel("MAE")
-axes[0, 1].tick_params(axis='x', rotation=45)
+    y_train_val_scaled = (y_train_val - y_mean) / y_std
+    y_test_scaled = (y_test - y_mean) / y_std
 
-# Plot 3: Weight Magnitude comparison
-axes[1, 0].bar(evaluations_df["Model"], evaluations_df["Total Weights Magnitude"])
-axes[1, 0].set_title("Total Weights Magnitude Comparison")
-axes[1, 0].set_ylabel("Total Weights Magnitude")
-axes[1, 0].tick_params(axis='x', rotation=45)
+    # -------------------------------------------------------------------------
+    # Step 2: Define a small set of regularization configurations to compare
+    # -------------------------------------------------------------------------
+    # The exact numeric values can be adjusted based on the tuning results.
+    model_configs = [
+        ("No regularization", 0.0, 0.0),
+        ("L2 (0.001)", 0.0, 0.001),
+        ("L1 (0.001)", 0.001, 0.0),
+        ("L1+L2 (0.0001)", 0.0001, 0.0001),
+    ]
 
-# Plot 4: Overfitting (Train-Test difference) comparison
-axes[1, 1].bar(evaluations_df["Model"], evaluations_df["MSE Difference (Train-Test)"])
-axes[1, 1].set_title("Overfitting Measure (MSE Difference Train-Test)")
-axes[1, 1].set_ylabel("MSE Difference")
-axes[1, 1].tick_params(axis='x', rotation=45)
+    evaluations = []
+    for name, l1_reg, l2_reg in model_configs:
+        res = train_and_evaluate_model(
+            name=name,
+            l1_reg=l1_reg,
+            l2_reg=l2_reg,
+            X_train_val=X_train_val,
+            y_train_val_scaled=y_train_val_scaled,
+            X_test=X_test,
+            y_test_scaled=y_test_scaled,
+            y_train_original=y_train_val,
+            y_test_original=y_test,
+            y_mean=y_mean,
+            y_std=y_std,
+            epochs=100,
+        )
+        evaluations.append(res)
 
-plt.tight_layout()
-plt.savefig('regularization_comparison.png')
-print("\nComparison plot saved as regularization_comparison.png")
+    # Build a summary DataFrame excluding objects (nn, y_test_pred)
+    eval_df = pd.DataFrame(
+        [{k: v for k, v in e.items() if k not in ("nn", "y_test_pred")} for e in evaluations]
+    )
 
-# Generate scatter plots for the best regularized model vs non-regularized model
-best_reg_model = evaluations_df[evaluations_df["Model"] != "No Regularization"].iloc[evaluations_df[evaluations_df["Model"] != "No Regularization"]["Test MSE"].idxmin()]
-worst_model = evaluations_df[evaluations_df["Model"] == "No Regularization"]
+    print("\n--- Regularization evaluation summary ---")
+    print(eval_df)
 
-best_model_nn = models[best_reg_model["Model"]]
-worst_model_nn = models[worst_model["Model"]]
+    eval_df.to_csv("./regularization_evaluation_summary.csv", index=False)
+    print("Saved summary to regularization_evaluation_summary.csv")
 
-y_best_pred = best_model_nn.predict(X_test_bp)
-y_worst_pred = worst_model_nn.predict(X_test_bp)
+    # -------------------------------------------------------------------------
+    # Step 3: Plot aggregated metrics for the report
+    # -------------------------------------------------------------------------
 
-fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    # Test MSE vs model
+    plt.figure(figsize=(10, 4))
+    plt.bar(eval_df["Model"], eval_df["Test MSE"])
+    plt.ylabel("Test MSE")
+    plt.title("Test MSE vs regularization configuration")
+    plt.xticks(rotation=30)
+    plt.tight_layout()
+    plt.savefig("reg_test_mse.png")
 
-# Best regularized model
-axes[0].scatter(y_test_bp, y_best_pred, alpha=0.5)
-axes[0].plot([y_test_bp.min(), y_test_bp.max()], [y_test_bp.min(), y_test_bp.max()], 'r--', lw=2)
-axes[0].set_xlabel('Actual Values')
-axes[0].set_ylabel('Predicted Values')
-axes[0].set_title(f'{best_reg_model["Model"]}\nTest MSE: {best_reg_model["Test MSE"]:.4f}')
+    # Total |w| vs model (weight shrinkage)
+    plt.figure(figsize=(10, 4))
+    plt.bar(eval_df["Model"], eval_df["Total |w|"])
+    plt.ylabel("Sum |weights|")
+    plt.title("Total weight magnitude vs regularization configuration")
+    plt.xticks(rotation=30)
+    plt.tight_layout()
+    plt.savefig("reg_weight_magnitude.png")
 
-# Non-regularized model
-axes[1].scatter(y_test_bp, y_worst_pred, alpha=0.5)
-axes[1].plot([y_test_bp.min(), y_test_bp.max()], [y_test_bp.min(), y_test_bp.max()], 'r--', lw=2)
-axes[1].set_xlabel('Actual Values')
-axes[1].set_ylabel('Predicted Values')
-axes[1].set_title(f'{worst_model["Model"]}\nTest MSE: {worst_model["Test MSE"]:.4f}')
+    # Overfitting measure |MSE_train - MSE_test|
+    plt.figure(figsize=(10, 4))
+    plt.bar(eval_df["Model"], eval_df["MSE diff (train-test)"])
+    plt.ylabel("|MSE_train - MSE_test|")
+    plt.title("Overfitting measure vs regularization configuration")
+    plt.xticks(rotation=30)
+    plt.tight_layout()
+    plt.savefig("reg_overfitting.png")
 
-plt.tight_layout()
-plt.savefig('regularization_scatter_comparison.png')
-print("Scatter plot comparison saved as regularization_scatter_comparison.png")
+    # -------------------------------------------------------------------------
+    # Step 4: Scatter plots for the non-regularized and best-regularized models
+    # -------------------------------------------------------------------------
+    no_reg = next(e for e in evaluations if e["Model"] == "No regularization")
+    best_reg = min(
+        [e for e in evaluations if e["Model"] != "No regularization"],
+        key=lambda e: e["Test MSE"],
+    )
 
-print("\nRegularization evaluation completed successfully!")
-print("The comparison clearly shows the benefits of regularization in improving generalization and reducing overfitting.")
+    # Scatter: no regularization
+    plt.figure(figsize=(6, 6))
+    plt.scatter(y_test, no_reg["y_test_pred"], alpha=0.4)
+    mn = min(y_test.min(), no_reg["y_test_pred"].min())
+    mx = max(y_test.max(), no_reg["y_test_pred"].max())
+    plt.plot([mn, mx], [mn, mx], "--")
+    plt.xlabel("Real value (Purchase Amount USD)")
+    plt.ylabel("Predicted value (Purchase Amount USD)")
+    plt.title("No regularization – Test predictions vs real")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("scatter_no_regularization.png")
+
+    # Scatter: best regularized model
+    plt.figure(figsize=(6, 6))
+    plt.scatter(y_test, best_reg["y_test_pred"], alpha=0.4)
+    mn = min(y_test.min(), best_reg["y_test_pred"].min())
+    mx = max(y_test.max(), best_reg["y_test_pred"].max())
+    plt.plot([mn, mx], [mn, mx], "--")
+    plt.xlabel("Real value (Purchase Amount USD)")
+    plt.ylabel("Predicted value (Purchase Amount USD)")
+    plt.title(f"{best_reg['Model']} – Test predictions vs real")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig("scatter_best_regularized.png")
+
+    print(
+        "\nSaved plots:\n"
+        "  reg_test_mse.png\n"
+        "  reg_weight_magnitude.png\n"
+        "  reg_overfitting.png\n"
+        "  scatter_no_regularization.png\n"
+        "  scatter_best_regularized.png"
+    )
+
+
+if __name__ == "__main__":
+    main()
