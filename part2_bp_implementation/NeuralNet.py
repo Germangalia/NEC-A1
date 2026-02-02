@@ -35,9 +35,10 @@ class NeuralNet:
             self.w.append(np.random.randn(layers[lay], layers[lay - 1]) * 0.5)
 
         # theta: Array of arrays for the thresholds (biases)
+        # Initialize with small random values to allow learning
         self.theta = []
         for lay in range(self.L):
-            self.theta.append(np.zeros(layers[lay]))
+            self.theta.append(np.random.randn(layers[lay]) * 0.1)
 
         # delta: Array of arrays for the propagation of errors
         self.delta = []
