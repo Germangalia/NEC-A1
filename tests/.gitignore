@@ -1,0 +1,3 @@
+# Ignore debug outputs and test artifacts
+*.pyc
+__pycache__/

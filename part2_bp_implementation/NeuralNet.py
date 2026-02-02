@@ -17,6 +17,14 @@ class NeuralNet:
         # n: Array with the number of units in each layer
         self.n = layers.copy()
 
+        # Activation function name (set this early for weight initialization)
+        self.fact = fact
+        self.learning_rate = learning_rate
+        self.momentum = momentum
+        # Regularization parameters
+        self.l1_reg = l1_reg  # L1 regularization parameter
+        self.l2_reg = l2_reg  # L2 regularization parameter
+
         # h: Array of arrays for the fields (weighted inputs)
         self.h = []
         for lay in range(self.L):
@@ -32,13 +40,20 @@ class NeuralNet:
         self.w.append(np.zeros((1, 1)))  # Placeholder, w[1] is the first actual weight matrix
         for lay in range(1, self.L):
             # w[lay] is the weight matrix from layer lay-1 to layer lay
-            # Use smaller initialization for output layer to prevent saturation
+            n_in = layers[lay - 1]  # Number of input units to this layer
             if lay == self.L - 1:
-                # Output layer: smaller random weights for regression
-                self.w.append(np.random.randn(layers[lay], layers[lay - 1]) * 0.01)
+                # Output layer: smaller random weights for regression (linear activation)
+                self.w.append(np.random.randn(layers[lay], n_in) * 0.01)
+            elif self.fact == 'relu':
+                # Hidden layers with ReLU: He initialization (He normal)
+                # std = sqrt(2 / n_in) to maintain variance through the network
+                std = np.sqrt(2.0 / n_in)
+                self.w.append(np.random.randn(layers[lay], n_in) * std)
             else:
-                # Hidden layers: normal random initialization
-                self.w.append(np.random.randn(layers[lay], layers[lay - 1]) * 0.5)
+                # Hidden layers with sigmoid/tanh: Xavier/Glorot initialization
+                # std = sqrt(1 / n_in) or sqrt(2 / (n_in + n_out))
+                std = np.sqrt(1.0 / n_in)
+                self.w.append(np.random.randn(layers[lay], n_in) * std)
 
         # theta: Array of arrays for the thresholds (biases)
         # Initialize with small random values to allow learning
@@ -76,14 +91,6 @@ class NeuralNet:
         self.d_theta_prev = []
         for lay in range(self.L):
             self.d_theta_prev.append(np.zeros(layers[lay]))
-
-        # Activation function name
-        self.fact = fact
-        self.learning_rate = learning_rate
-        self.momentum = momentum
-        # Regularization parameters
-        self.l1_reg = l1_reg  # L1 regularization parameter
-        self.l2_reg = l2_reg  # L2 regularization parameter
 
     def activation_function(self, x):
         """
@@ -234,7 +241,8 @@ class NeuralNet:
 
             # Calculate threshold (bias) changes: d_theta[l] = -learning_rate * delta[l]
             # Note: Regularization is typically NOT applied to biases/thresholds
-            self.d_theta[l] = -self.learning_rate * self.delta[l]
+            # delta[l] has shape (n_units, n_samples), need to sum across samples
+            self.d_theta[l] = -self.learning_rate * np.sum(self.delta[l], axis=1, keepdims=True)
 
             # Reshape d_theta to match the stored array dimensions if needed
             if self.d_theta[l].shape != self.d_theta_prev[l].shape:
@@ -244,7 +252,8 @@ class NeuralNet:
             self.d_theta[l] += self.momentum * self.d_theta_prev[l]
 
             # Update thresholds: theta[l] = theta[l] + d_theta[l]
-            self.theta[l] += self.d_theta[l]
+            # d_theta has shape (n_units, 1), theta has shape (n_units,), need to flatten
+            self.theta[l] += self.d_theta[l].flatten()
 
             # Store current changes for next iteration's momentum
             self.d_w_prev[l] = self.d_w[l].copy()
@@ -259,8 +268,6 @@ class NeuralNet:
         :param validation_split: Fraction of data to use for validation (between 0 and 1)
         :return: Training and validation loss history
         """
-        import numpy as np
-
         # Convert inputs to numpy arrays if they aren't already
         X = np.array(X)
         y = np.array(y)
