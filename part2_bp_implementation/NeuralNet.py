@@ -32,13 +32,23 @@ class NeuralNet:
         self.w.append(np.zeros((1, 1)))  # Placeholder, w[1] is the first actual weight matrix
         for lay in range(1, self.L):
             # w[lay] is the weight matrix from layer lay-1 to layer lay
-            self.w.append(np.random.randn(layers[lay], layers[lay - 1]) * 0.5)
+            # Use smaller initialization for output layer to prevent saturation
+            if lay == self.L - 1:
+                # Output layer: smaller random weights for regression
+                self.w.append(np.random.randn(layers[lay], layers[lay - 1]) * 0.01)
+            else:
+                # Hidden layers: normal random initialization
+                self.w.append(np.random.randn(layers[lay], layers[lay - 1]) * 0.5)
 
         # theta: Array of arrays for the thresholds (biases)
         # Initialize with small random values to allow learning
         self.theta = []
         for lay in range(self.L):
-            self.theta.append(np.random.randn(layers[lay]) * 0.1)
+            # Use smaller initialization for output layer
+            if lay == self.L - 1:
+                self.theta.append(np.random.randn(layers[lay]) * 0.01)
+            else:
+                self.theta.append(np.random.randn(layers[lay]) * 0.1)
 
         # delta: Array of arrays for the propagation of errors
         self.delta = []
@@ -160,8 +170,14 @@ class NeuralNet:
             self.h[l] = np.dot(self.w[l], self.xi[l - 1]) + self.theta[l].reshape(-1, 1)
 
             # Apply activation function to get activations for layer l
-            # Using the activation function specified by self.fact
-            self.xi[l] = self.activation_function(self.h[l])
+            # For output layer (L-1), use linear activation for regression
+            # For hidden layers, use the specified activation function
+            if l == self.L - 1:
+                # Output layer: linear activation (no transformation)
+                self.xi[l] = self.h[l]
+            else:
+                # Hidden layers: use specified activation function
+                self.xi[l] = self.activation_function(self.h[l])
 
         # Return the output of the last layer (transposed back to (n_samples, n_outputs))
         return self.xi[self.L - 1].T
@@ -179,8 +195,9 @@ class NeuralNet:
         _ = self.forward_propagation(X)
 
         # Calculate output layer error (delta)
-        # For the output layer (L-1), delta = (predicted - actual) * derivative of activation
-        self.delta[self.L - 1] = (self.xi[self.L - 1] - y) * self.activation_derivative(self.h[self.L - 1])
+        # For the output layer (L-1), we use linear activation, so derivative is 1
+        # delta = (predicted - actual) * 1 = (predicted - actual)
+        self.delta[self.L - 1] = (self.xi[self.L - 1] - y)
 
         # Backpropagate the error through the layers (from L-2 down to 1)
         for l in range(self.L - 2, 0, -1):
